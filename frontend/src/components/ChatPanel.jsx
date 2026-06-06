@@ -12,6 +12,64 @@ const CHIP_DEFS = [
   { key: 'urgency', label: 'Urgency' },
 ]
 
+// One-tap example requests so a first-time judge isn't staring at an empty box.
+// Deliberately messy + mixed-language to show off the parser.
+const STARTERS = [
+  'AB+ ke 2 donor chahiye jaldi, Indus',
+  'Need 3 units O+ at Liaquat National',
+  'B negative chahiye Civil Hospital',
+]
+
+const timeLabel = () =>
+  new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+// Animated "bot is thinking" indicator (three bouncing dots).
+function TypingDots() {
+  return (
+    <span className="typing-dots" aria-label="typing">
+      <i /><i /><i />
+    </span>
+  )
+}
+
+// A single chat row: avatar + bubble + timestamp. Bot messages type themselves
+// out once on first appearance (captured at mount so they never re-animate).
+function Bubble({ msg, fresh, onType }) {
+  const [time] = useState(timeLabel)
+  const [animate] = useState(() => fresh && msg.role === 'bot')
+  const [shown, setShown] = useState(() => (fresh && msg.role === 'bot' ? '' : msg.text))
+
+  useEffect(() => {
+    if (!animate) return
+    let i = 0
+    const id = setInterval(() => {
+      i += 2
+      setShown(msg.text.slice(0, i))
+      onType?.()
+      if (i >= msg.text.length) {
+        setShown(msg.text)
+        clearInterval(id)
+      }
+    }, 16)
+    return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const typing = animate && shown.length < msg.text.length
+  return (
+    <div className={`msg msg--${msg.role}`}>
+      <div className="avatar">{msg.role === 'bot' ? '🩸' : '🧑'}</div>
+      <div className={`bubble bubble--${msg.role}`}>
+        <span className="bubble__text">
+          {shown}
+          {typing && <span className="caret" />}
+        </span>
+        <span className="bubble__time">{time}</span>
+      </div>
+    </div>
+  )
+}
+
 export default function ChatPanel({ messages, fields, busy, onSend }) {
   const [text, setText] = useState('')
   const [recording, setRecording] = useState(false)
@@ -19,9 +77,23 @@ export default function ChatPanel({ messages, fields, busy, onSend }) {
   const logRef = useRef(null)
   const recorderRef = useRef(null)
   const chunksRef = useRef([])
+  // Track how many messages we've already rendered so only the newest animates.
+  const seenRef = useRef(0)
+
+  const scrollToBottom = () => {
+    const el = logRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }
 
   useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
+    scrollToBottom()
+  }, [messages, busy, transcribing])
+
+  // Only messages appended since the last commit are "fresh" (and animate).
+  // Updated in an effect (not during render) so it's StrictMode-safe.
+  const prevCount = seenRef.current
+  useEffect(() => {
+    seenRef.current = messages.length
   }, [messages])
 
   function submit(e) {
@@ -70,10 +142,13 @@ export default function ChatPanel({ messages, fields, busy, onSend }) {
 
   const hasAnyField = CHIP_DEFS.some(({ key }) => fields[key] && !(key === 'urgency' && fields[key] === 'normal'))
   const inputDisabled = busy || transcribing
+  const showStarters = messages.length <= 1 && !busy && !transcribing
 
   return (
     <div className="chat">
-      <h2 className="panel__title">Chat</h2>
+      <h2 className="panel__title">
+        Chat <span className="chat__status"><i className="chat__dot" />online</span>
+      </h2>
 
       {hasAnyField && (
         <div className="chips">
@@ -91,11 +166,33 @@ export default function ChatPanel({ messages, fields, busy, onSend }) {
 
       <div className="chat__log" ref={logRef}>
         {messages.map((m, i) => (
-          <div key={i} className={`bubble bubble--${m.role}`}>{m.text}</div>
+          <Bubble key={i} msg={m} fresh={i >= prevCount} onType={scrollToBottom} />
         ))}
-        {recording && <div className="bubble bubble--user bubble--rec">🎙 recording… (tap mic to stop)</div>}
+
+        {showStarters && (
+          <div className="starters">
+            <span className="starters__label">Try one of these:</span>
+            {STARTERS.map((s) => (
+              <button key={s} className="starter" disabled={inputDisabled} onClick={() => onSend(s)}>
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {recording && (
+          <div className="msg msg--user">
+            <div className="avatar">🧑</div>
+            <div className="bubble bubble--user bubble--rec">🎙 recording… (tap mic to stop)</div>
+          </div>
+        )}
         {(busy || transcribing) && (
-          <div className="bubble bubble--bot bubble--typing">{transcribing ? 'transcribing…' : '…'}</div>
+          <div className="msg msg--bot">
+            <div className="avatar">🩸</div>
+            <div className="bubble bubble--bot bubble--typing">
+              {transcribing ? 'transcribing…' : <TypingDots />}
+            </div>
+          </div>
         )}
       </div>
 

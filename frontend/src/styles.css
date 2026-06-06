@@ -47,15 +47,52 @@ body {
 
 /* Chat */
 .chat { display: flex; flex-direction: column; height: 100%; }
-.chat__log { flex: 1; overflow: auto; }
-.bubble { max-width: 85%; padding: 8px 12px; border-radius: 12px; margin-bottom: 8px; font-size: 14px; line-height: 1.35; white-space: pre-wrap; }
-.bubble--bot { background: #222732; }
-.bubble--user { background: #2e5a3a; margin-left: auto; }
-.bubble--typing { opacity: .6; letter-spacing: 2px; }
+.chat__log { flex: 1; overflow: auto; padding-right: 2px; scroll-behavior: smooth; }
+.chat__status { font-size: 10.5px; font-weight: 400; color: #6fcf86; text-transform: none; letter-spacing: 0; margin-left: 8px; display: inline-flex; align-items: center; gap: 5px; }
+.chat__dot { width: 7px; height: 7px; border-radius: 50%; background: #25d366; box-shadow: 0 0 6px #25d366; animation: pulseDot 1.8s ease-in-out infinite; }
+@keyframes pulseDot { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+
+/* Message row: avatar + bubble, slides up on entry */
+.msg { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 10px; animation: msgIn .26s cubic-bezier(.22,.61,.36,1); }
+.msg--user { flex-direction: row-reverse; }
+@keyframes msgIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.avatar { width: 26px; height: 26px; flex: 0 0 auto; border-radius: 50%; display: grid; place-items: center;
+  font-size: 14px; background: #222732; border: 1px solid var(--border); }
+.msg--user .avatar { background: #2e5a3a; border-color: #2e6b3f; }
+
+.bubble { display: flex; flex-direction: column; max-width: 78%; padding: 8px 12px; border-radius: 14px;
+  font-size: 14px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+.bubble--bot { background: #222732; border-bottom-left-radius: 4px; }
+.bubble--user { background: #2e5a3a; border-bottom-right-radius: 4px; }
+.bubble__time { font-size: 9.5px; color: var(--muted); opacity: .65; margin-top: 4px; align-self: flex-end; }
+.bubble--typing { opacity: .85; }
+
+/* Typewriter caret on the message currently being "spoken" */
+.caret { display: inline-block; width: 2px; height: 1em; vertical-align: text-bottom; margin-left: 1px;
+  background: currentColor; opacity: .7; animation: caretBlink .8s step-end infinite; }
+@keyframes caretBlink { 50% { opacity: 0; } }
+
+/* Animated thinking dots */
+.typing-dots { display: inline-flex; gap: 4px; align-items: center; padding: 2px 0; }
+.typing-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: dotBounce 1.2s infinite both; }
+.typing-dots i:nth-child(2) { animation-delay: .15s; }
+.typing-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes dotBounce { 0%, 80%, 100% { opacity: .35; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-4px); } }
+
+/* One-tap starter prompts (empty-chat state) */
+.starters { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px 34px; animation: msgIn .3s ease; }
+.starters__label { width: 100%; font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.starter { text-align: left; font-size: 12px; color: var(--text); background: #0f1115; border: 1px solid var(--border);
+  border-radius: 999px; padding: 5px 11px; cursor: pointer; transition: border-color .15s, color .15s, transform .1s; }
+.starter:hover:not(:disabled) { border-color: var(--accent); color: #ff8a8e; transform: translateY(-1px); }
+.starter:disabled { opacity: .5; cursor: not-allowed; }
+
 .chat__input { display: flex; gap: 8px; margin-top: 8px; }
-.chat__input input { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: #0f1115; color: var(--text); }
-.chat__input button { padding: 8px 14px; border-radius: 8px; border: none; background: var(--accent); color: #fff; cursor: pointer; }
-.mic { padding: 8px 11px !important; background: #0f1115 !important; border: 1px solid var(--border) !important; color: var(--text) !important; }
+.chat__input input { flex: 1; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--border); background: #0f1115; color: var(--text); transition: border-color .15s; }
+.chat__input input:focus { outline: none; border-color: #555c6a; }
+.chat__input button { padding: 8px 14px; border-radius: 10px; border: none; background: var(--accent); color: #fff; cursor: pointer; transition: filter .15s; }
+.chat__input button:not(:disabled):hover { filter: brightness(1.1); }
+.mic { padding: 8px 11px !important; background: #0f1115 !important; border: 1px solid var(--border) !important; color: var(--text) !important; border-radius: 10px !important; }
 .mic--on { background: var(--accent) !important; color: #fff !important; animation: urgentPulse 1s ease-in-out infinite; }
 .bubble--rec { background: #5a2e2e; }
 
