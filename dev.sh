@@ -3,7 +3,7 @@
 #
 # Usage:
 #   ./dev.sh           # setup-if-needed, then start backend + frontend
-#   ./dev.sh setup     # only do setup (venv, deps, donors.csv)
+#   ./dev.sh setup     # only do setup (venv, deps, lifeline.db)
 #   ./dev.sh fresh     # reinstall backend + frontend deps, then start
 #
 # Backend runs on :8000, frontend on :5173. Ctrl+C stops both.
@@ -28,13 +28,13 @@ find_python() {
 
 echo "== LifeLine dev launcher =="
 
-# 1. donors.csv
-if [ ! -f "$DATA/donors.csv" ]; then
+# 1. donor dataset (portable SQLite DB, committed to the repo)
+if [ ! -f "$DATA/lifeline.db" ]; then
   PY="$(find_python)" || { echo "Python not found. Install Python 3.10+ and re-run."; exit 1; }
-  echo "Generating data/donors.csv ..."
+  echo "Seeding data/lifeline.db ..."
   ( cd "$DATA" && "$PY" generate_donors.py )
 else
-  echo "donors.csv present."
+  echo "data/lifeline.db present."
 fi
 
 # 2. backend venv + deps

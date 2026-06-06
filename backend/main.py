@@ -10,50 +10,36 @@ Run:  cd backend && uvicorn main:app --reload --port 8000
 Docs: http://localhost:8000/docs
 """
 import asyncio
-import csv
 import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # ranking.py is the matching brain — reuse it, never reinvent it.
 import ranking
 import llm
+import whatsapp
+import db  # portable SQLite donor store (data/lifeline.db)
 
 # Wave 1 contacts the top N eligible donors; escalation adds the next N.
 WAVE_SIZE = 8
 
-# --- Paths --------------------------------------------------------------------
-BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
-REPO_ROOT = os.path.dirname(BACKEND_DIR)
-DONORS_CSV = os.path.join(REPO_ROOT, "data", "donors.csv")
-
-# --- In-memory state (no DB — hackathon guardrail) ----------------------------
+# --- In-memory request state --------------------------------------------------
+# Donors live in SQLite (db.py); per-request waves/confirmations are ephemeral
+# demo state and intentionally reset on restart.
 STATE = {
-    "donors": [],       # list[dict] loaded from donors.csv
+    "donors": [],       # list[dict] loaded from data/lifeline.db at startup
     "requests": {},     # request_id -> request object
     "next_id": 1,       # incrementing request id counter
 }
 
 
-def load_donors(path: str = DONORS_CSV) -> list[dict]:
-    """Load donors.csv into a list of dicts. Returns [] (with a warning) if missing."""
-    if not os.path.exists(path):
-        print(f"[startup] WARNING: {path} not found. "
-              f"Run `cd data && python generate_donors.py` to create it.")
-        return []
-    with open(path, encoding="utf-8") as f:
-        donors = list(csv.DictReader(f))
-    print(f"[startup] Loaded {len(donors)} donors from {path}")
-    return donors
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    STATE["donors"] = load_donors()
+    STATE["donors"] = db.load_donors()
     # Warm up Groq off the event loop so the first real parse isn't cold.
     # Fire-and-forget — never blocks startup or crashes if Groq is unavailable.
     asyncio.get_running_loop().run_in_executor(None, llm.warmup)
@@ -155,6 +141,16 @@ def _get_request(req_id: int) -> dict:
     return req
 
 
+def _dispatch_whatsapp(background: BackgroundTasks, req: dict, donors: list) -> None:
+    """When the WhatsApp switch is live, message freshly-contacted donors in the
+    background so outbound latency never affects the API response. No-op (fully
+    mocked) when the switch is off — the default."""
+    if not whatsapp.is_live():
+        return
+    for d in donors:
+        background.add_task(whatsapp.notify_donor, d, req)
+
+
 # --- C1: natural-language intake ----------------------------------------------
 @app.post("/request/parse")
 def request_parse(body: ParseBody):
@@ -165,7 +161,7 @@ def request_parse(body: ParseBody):
 
 # --- C2: rank donors + open a request, contact wave 1 -------------------------
 @app.post("/request/create")
-def request_create(body: CreateBody):
+def request_create(body: CreateBody, background: BackgroundTasks):
     """Resolve the hospital, rank eligible matching donors, open a request, and
     mark the top WAVE_SIZE donors as contacted (wave 1).
 
@@ -225,6 +221,8 @@ def request_create(body: CreateBody):
         "donors": donor_states,
     }
     STATE["requests"][req_id] = request
+    # Wave 1 is "contacted" — if the WhatsApp switch is live, reach them for real.
+    _dispatch_whatsapp(background, request, [d for d in donor_states if d["status"] == "contacted"])
     return _summary(request)
 
 
@@ -236,17 +234,19 @@ def request_status(req_id: int):
 
 
 @app.post("/request/{req_id}/escalate")
-def request_escalate(req_id: int):
+def request_escalate(req_id: int, background: BackgroundTasks):
     """Contact the next wave: flip the next block of WAVE_SIZE pending donors to 'contacted'."""
     req = _get_request(req_id)
     next_wave = req["current_wave"] + 1
-    promoted = 0
+    promoted = []
     for d in req["donors"]:
         if d["wave"] == next_wave and d["status"] == "pending":
             d["status"] = "contacted"
-            promoted += 1
+            promoted.append(d)
     if promoted:
         req["current_wave"] = next_wave
+    # Newly contacted this wave — WhatsApp them too when the switch is live.
+    _dispatch_whatsapp(background, req, promoted)
     return _summary(req)
 
 
@@ -282,3 +282,62 @@ async def voice(file: UploadFile = File(...)):
     if not text:
         raise HTTPException(status_code=503, detail="Transcription unavailable. Try typing instead.")
     return {"text": text}
+
+
+# --- WhatsApp (Meta Cloud API) — config check + test send ---------------------
+class WaTestBody(BaseModel):
+    to: Optional[str] = None        # digits + country code; falls back to WHATSAPP_DEMO_REDIRECT
+    use_template: bool = True       # first contact must be a template; hello_world ships by default
+    template: str = "hello_world"
+    text: str = "🩸 LifeLine test message — your WhatsApp integration works!"
+
+
+class WaToggleBody(BaseModel):
+    enabled: bool
+
+
+def _wa_status() -> dict:
+    """Shared WhatsApp switch state — consumed by the frontend header toggle."""
+    return {
+        "configured": whatsapp.is_configured(),   # creds present in .env
+        "enabled": whatsapp.is_enabled(),          # the switch
+        "live": whatsapp.is_live(),                # switch ON *and* configured
+        "has_demo_redirect": bool(os.getenv("WHATSAPP_DEMO_REDIRECT")),
+        "api_version": whatsapp.GRAPH_VERSION,
+    }
+
+
+@app.get("/whatsapp/status")
+def whatsapp_status():
+    """Quick check of the WhatsApp switch + env (without exposing the token)."""
+    return _wa_status()
+
+
+@app.post("/whatsapp/toggle")
+def whatsapp_toggle(body: WaToggleBody):
+    """Flip the live-sending switch at runtime. Can't enable without creds."""
+    if body.enabled and not whatsapp.is_configured():
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot enable: set WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID in backend/.env.",
+        )
+    whatsapp.set_enabled(body.enabled)
+    return _wa_status()
+
+
+@app.post("/whatsapp/test")
+def whatsapp_test(body: WaTestBody):
+    """Send one real WhatsApp message to verify the integration end-to-end."""
+    if not whatsapp.is_configured():
+        raise HTTPException(status_code=400,
+                            detail="Set WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID in backend/.env.")
+    to = body.to or os.getenv("WHATSAPP_DEMO_REDIRECT")
+    if not to:
+        raise HTTPException(status_code=400, detail="Provide 'to' or set WHATSAPP_DEMO_REDIRECT.")
+    if body.use_template:
+        ok, info = whatsapp.send_template(to, body.template, "en_US")
+    else:
+        ok, info = whatsapp.send_text(to, body.text)
+    if not ok:
+        raise HTTPException(status_code=502, detail=f"WhatsApp send failed: {info}")
+    return {"sent": True, "to": whatsapp.normalize_phone(to), "via": "template" if body.use_template else "text", "response": info}

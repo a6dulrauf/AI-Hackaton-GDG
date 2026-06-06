@@ -3,6 +3,7 @@ import ChatPanel from './components/ChatPanel.jsx'
 import MapPanel from './components/MapPanel.jsx'
 import DashboardPanel from './components/DashboardPanel.jsx'
 import DonorSimPanel from './components/DonorSimPanel.jsx'
+import WhatsAppToggle from './components/WhatsAppToggle.jsx'
 import { parseRequest, createRequest, getStatus, escalateRequest, respondDonor } from './api.js'
 
 const REQUIRED = ['blood_group', 'count', 'hospital']
@@ -63,9 +64,11 @@ export default function App() {
 
       const missing = missingOf(merged)
       if (missing.length > 0) {
-        say('bot', FIELD_PROMPTS[missing[0]])
+        // Prefer the LLM's natural, same-language reply; fall back to a fixed
+        // prompt only if Groq was unavailable (parsed.reply === null).
+        say('bot', parsed.reply || FIELD_PROMPTS[missing[0]])
       } else {
-        say('bot', 'Got it — ranking eligible donors nearby…')
+        say('bot', parsed.reply || 'Got it — ranking eligible donors nearby…')
         const res = await createRequest({
           blood_group: merged.blood_group,
           count: Number(merged.count),
@@ -122,7 +125,10 @@ export default function App() {
         <span className="app__logo">🩸 LifeLine</span>
         <span className="app__tag">Real-time blood-donor matching · Al-Khidmat Karachi</span>
         {urgent && <span className="app__urgent">● HIGH URGENCY</span>}
-        <button className="app__reset" onClick={handleReset}>New request</button>
+        <div className="app__actions">
+          <WhatsAppToggle />
+          <button className="app__reset" onClick={handleReset}>New request</button>
+        </div>
       </header>
 
       <main className="app__grid">

@@ -1,9 +1,10 @@
 """
-Generate a reproducible synthetic Karachi blood-donor dataset (donors.csv).
-Pure standard library — no pip installs. Run: python generate_donors.py
-Seed is fixed so everyone on the team gets the identical file.
+Generate a reproducible synthetic Karachi blood-donor dataset into a portable
+SQLite database (data/lifeline.db) that ships with the repo.
+Pure standard library — no pip installs (sqlite3 is stdlib). Run: python generate_donors.py
+Seed is fixed so everyone on the team gets the byte-identical dataset.
 """
-import csv, random, datetime
+import os, sqlite3, random, datetime
 from collections import Counter
 
 random.seed(42)
@@ -34,6 +35,31 @@ LAST = ["Khan","Ahmed","Siddiqui","Sheikh","Malik","Qureshi","Hussain","Raza","A
 
 TODAY = datetime.date(2026, 6, 6)
 N = 220
+
+# Portable DB file lives next to this script (data/lifeline.db), resolved
+# absolutely so it doesn't matter which directory you run from.
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lifeline.db")
+
+# Column order here must match backend/db.py DONOR_COLUMNS (kept in sync by hand).
+SCHEMA = """
+CREATE TABLE donors (
+  donor_id TEXT PRIMARY KEY,
+  name TEXT,
+  gender TEXT,
+  dob TEXT,
+  age INTEGER,
+  blood_group TEXT,
+  phone TEXT,
+  neighbourhood TEXT,
+  lat REAL,
+  lng REAL,
+  last_donation_date TEXT,
+  days_since_last_donation INTEGER,
+  total_donations INTEGER,
+  times_contacted_last_30d INTEGER,
+  response_rate REAL
+)
+"""
 
 def jitter(lat, lng):
     return round(lat + random.uniform(-0.012, 0.012), 5), round(lng + random.uniform(-0.012, 0.012), 5)
@@ -68,13 +94,22 @@ def build():
 
 def main():
     rows = build()
-    with open("donors.csv", "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0]))
-        w.writeheader(); w.writerows(rows)
+    cols = list(rows[0])
+    placeholders = ", ".join("?" for _ in cols)
+    # Fresh build every run — drop and recreate so re-seeding is idempotent.
+    if os.path.exists(DB_PATH):
+        os.remove(DB_PATH)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(SCHEMA)
+        conn.executemany(
+            f"INSERT INTO donors ({', '.join(cols)}) VALUES ({placeholders})",
+            [tuple(r[c] for c in cols) for r in rows],
+        )
+        conn.commit()
     bgc = Counter(r["blood_group"] for r in rows)
     elig = sum(1 for r in rows if (r["gender"]=="Male" and r["days_since_last_donation"]>90)
                                  or (r["gender"]=="Female" and r["days_since_last_donation"]>120))
-    print(f"Wrote donors.csv  ({len(rows)} rows)")
+    print(f"Wrote {DB_PATH}  ({len(rows)} rows)")
     print(f"Eligible by recovery window: {elig} ({round(100*elig/len(rows))}%)")
     print("Blood-group mix:", dict(sorted(bgc.items(), key=lambda x: -x[1])))
 

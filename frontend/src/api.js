@@ -30,6 +30,9 @@ export const getStatus = (id) => get(`/request/${id}/status`)
 export const escalateRequest = (id) => post(`/request/${id}/escalate`, {})
 export const respondDonor = (body) => post('/donor/respond', body)
 
+export const getWhatsappStatus = () => get('/whatsapp/status')
+export const toggleWhatsapp = (enabled) => post('/whatsapp/toggle', { enabled })
+
 export async function transcribeVoice(blob) {
   const fd = new FormData()
   fd.append('file', blob, 'voice.webm')

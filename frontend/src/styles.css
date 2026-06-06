@@ -111,8 +111,18 @@ body {
 .sim__label strong { color: var(--text); }
 .sim button:disabled, .chat__input input:disabled, .chat__input button:disabled { opacity: .5; cursor: not-allowed; }
 
-/* Header reset button */
-.app__reset { margin-left: auto; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border); background: #0f1115; color: var(--text); cursor: pointer; font-size: 12px; }
+/* Header actions (WhatsApp switch + reset) */
+.app__actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.app__reset { padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border); background: #0f1115; color: var(--text); cursor: pointer; font-size: 12px; }
+
+/* WhatsApp live/mocked switch */
+.wa-toggle { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px;
+  border: 1px solid var(--border); background: #0f1115; color: var(--muted); cursor: pointer; font-size: 12px; }
+.wa-toggle:not(:disabled):hover { border-color: #555c6a; }
+.wa-toggle__dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; }
+.wa-toggle--on { border-color: #2e6b3f; color: #8ee6a8; }
+.wa-toggle--on .wa-toggle__dot { background: #25d366; box-shadow: 0 0 6px #25d366; }
+.wa-toggle--off { opacity: .55; cursor: not-allowed; }
 
 /* Extracted-field chips */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }

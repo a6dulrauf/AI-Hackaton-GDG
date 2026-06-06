@@ -128,9 +128,8 @@ def rank_donors(donors, blood_group, hospital_latlng, count_needed=5, allow_comp
     return ranked
 
 if __name__ == "__main__":
-    import csv
-    with open("donors.csv", encoding="utf-8") as f:
-        donors = list(csv.DictReader(f))
+    import db
+    donors = db.load_donors()
     coords = resolve_hospital("Indus")
     top = rank_donors(donors, "O+", coords, count_needed=5)[:5]
     print(f"Hospital coords: {coords}  |  matching eligible O+ donors: {len(rank_donors(donors,'O+',coords))}")

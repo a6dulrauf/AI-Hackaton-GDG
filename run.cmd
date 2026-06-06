@@ -35,14 +35,16 @@ set "PY="
 if not exist "%VENV_PY%" call :find_python
 if not exist "%VENV_PY%" if not defined PY goto :no_python
 
-REM --- 1. donor dataset ---
-if not exist "%DATA%\donors.csv" (
-  echo Generating data\donors.csv ...
+REM --- 1. donor dataset (portable SQLite DB, committed to the repo) ---
+if not exist "%DATA%\lifeline.db" (
+  echo Seeding data\lifeline.db ...
+  set "SEED_PY=%PY%"
+  if exist "%VENV_PY%" set "SEED_PY=%VENV_PY%"
   pushd "%DATA%"
-  "%PY%" generate_donors.py || ( popd & goto :fail )
+  "!SEED_PY!" generate_donors.py || ( popd & goto :fail )
   popd
 ) else (
-  echo donors.csv present.
+  echo data\lifeline.db present.
 )
 
 REM --- 2. backend venv + requirements ---

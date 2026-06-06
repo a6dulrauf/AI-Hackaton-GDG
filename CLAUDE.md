@@ -12,8 +12,15 @@ donors, "contacts" them in waves, and shows a coordinator a live confirmation co
 **This is a hackathon demo.** Prioritise a clean, working end-to-end flow over completeness.
 
 ## Hard guardrails (do NOT violate)
-- **Do not** integrate real WhatsApp/SMS sending. The chat is a mocked web UI.
-- **Do not** add a database, user auth, or deployment infra. In-memory state only.
+- **WhatsApp is mocked by default.** Real Meta WhatsApp Cloud API sending exists
+  behind an opt-in switch (`WHATSAPP_ENABLED`, default off, + a header toggle /
+  `POST /whatsapp/toggle`) and routes through `WHATSAPP_DEMO_REDIRECT`. The wave
+  flow runs fully mocked unless the switch is flipped — never make live sending
+  the default. No SMS.
+- **Donor data** lives in a portable SQLite file (`data/lifeline.db`) committed to
+  the repo — no server, no auth, no migrations framework. **Per-request state**
+  (open requests, waves, confirmations) stays **in-memory** and resets on restart.
+  Do **not** add user auth or deployment infra.
 - **Do not** start "stretch" features until the core flow (C1–C5) demos cleanly.
 - **Do not** use any paid API. Groq + Gemini free tiers only. OSM tiles need no key.
 - Keep API keys in `backend/.env` (gitignored). Never hard-code secrets.
@@ -21,7 +28,8 @@ donors, "contacts" them in waves, and shows a coordinator a live confirmation co
 ## Stack
 - **Backend:** Python 3.10+, FastAPI, uvicorn. AI via Groq (`groq` SDK). Gemini (`google-genai`) only if we expand to the OCR fallback.
 - **Frontend:** React + Vite. Map via `react-leaflet` + OpenStreetMap tiles (no key).
-- **No DB.** Donors load from `data/donors.csv` at startup into memory.
+- **Portable DB.** Donors live in `data/lifeline.db` (SQLite, stdlib `sqlite3`,
+  committed to the repo) and load into memory at startup via `backend/db.py`.
 
 ## Repo structure (target)
 ```
@@ -29,10 +37,11 @@ donors, "contacts" them in waves, and shows a coordinator a live confirmation co
 ├── CLAUDE.md
 ├── docs/PLAN.md                  # full build plan (read for detail)
 ├── data/
-│   ├── generate_donors.py        # run once -> writes donors.csv (pure stdlib)
-│   └── donors.csv                # generated
+│   ├── generate_donors.py        # run once -> seeds lifeline.db (pure stdlib)
+│   └── lifeline.db               # portable SQLite donor store (committed)
 ├── backend/
 │   ├── main.py                   # FastAPI app + endpoints
+│   ├── db.py                     # SQLite read layer (loads donors at startup)
 │   ├── ranking.py                # HOSPITALS, eligibility, composite scoring (provided)
 │   ├── llm.py                    # Groq intake parse + reply classification
 │   ├── requirements.txt
@@ -43,12 +52,13 @@ donors, "contacts" them in waves, and shows a coordinator a live confirmation co
 ```
 
 ## Commands
-- Generate data: `cd data && python generate_donors.py`
+- Generate/seed data: `cd data && python generate_donors.py` (drops & rebuilds `lifeline.db`)
+- Inspect data: `sqlite3 data/lifeline.db "select * from donors limit 5"`
 - Backend: `cd backend && pip install -r requirements.txt && uvicorn main:app --reload --port 8000`
 - Frontend: `cd frontend && npm install && npm run dev`
 - CORS: backend must allow `http://localhost:5173` (Vite default).
 
-## Data model (donors.csv columns)
+## Data model (`donors` table columns)
 `donor_id, name, gender, dob, age, blood_group, phone, neighbourhood, lat, lng,
 last_donation_date, days_since_last_donation, total_donations,
 times_contacted_last_30d, response_rate`

@@ -68,8 +68,9 @@ def warmup():
 
 
 # --- Prompt -------------------------------------------------------------------
-SYSTEM_PROMPT = """You are an intake parser for a blood-donation coordinator in Karachi, Pakistan.
-Extract structured fields from a blood request that may be written in English, Urdu, Roman Urdu, or a mix.
+SYSTEM_PROMPT = """You are LifeLine, a warm, human blood-donation coordinator for Al-Khidmat in Karachi, Pakistan.
+You chat with a requester whose message may be in English, Urdu, Roman Urdu, or a mix, and you BOTH (a) extract structured fields and (b) write the next chat reply.
+
 Return STRICT JSON only (no prose, no markdown) with EXACTLY these keys:
   "blood_group": one of "A+","A-","B+","B-","AB+","AB-","O+","O-", or null
   "count": integer number of donors/units needed, or null
@@ -77,20 +78,33 @@ Return STRICT JSON only (no prose, no markdown) with EXACTLY these keys:
   "hospital": hospital name mentioned, or null
   "urgency": "high" or "normal"
   "missing_fields": array with any of "blood_group","count","hospital" whose value is null
+  "reply": a short, natural chat message back to the requester (see reply rules)
 
-Rules:
+Extraction rules:
 - "negative"/"-ve"/"neg" -> "-";  "positive"/"+ve"/"pos" -> "+".
 - Roman/Urdu cues for "needed": chahiye, darkaar, zaroorat, chaiye.
 - Roman/Urdu cues for HIGH urgency: jaldi, urgent, foran, emergency, asap, abhi, turant. Otherwise "normal".
-- Only blood_group, count and hospital are required; everything null among those goes in missing_fields."""
+- A hospital can be written casually (e.g. "civil", "aku", "liaquat national"). Put hospital names in "hospital", and only a residential area/neighbourhood in "location".
+- Only blood_group, count and hospital are required; everything null among those goes in missing_fields.
+
+Reply rules (this is the most important part — never be robotic):
+- Mirror the requester's language AND script: Roman Urdu -> reply in Roman Urdu, Urdu script -> Urdu script, English -> English. If mixed, follow their dominant style.
+- If any required field is still null, ask ONLY for the single most useful missing one, naturally and briefly. Acknowledge what they already told you.
+- If nothing required is missing, reassure them you're finding the nearest eligible donors now (do NOT invent counts or names).
+- If the message is just a greeting / small talk / off-topic, respond kindly and steer them to describe the blood need.
+- Vary your wording every turn. One or two sentences. No emojis unless they use them. Never output JSON or field names inside "reply"."""
 
 FEWSHOT = [
     {"role": "user", "content": "AB negative chahiye jaldi, Liaquat National mein"},
-    {"role": "assistant", "content": '{"blood_group":"AB-","count":null,"location":null,"hospital":"Liaquat National Hospital","urgency":"high","missing_fields":["count"]}'},
+    {"role": "assistant", "content": '{"blood_group":"AB-","count":null,"location":null,"hospital":"Liaquat National Hospital","urgency":"high","missing_fields":["count"],"reply":"Theek hai, AB- ka urgent intezaam Liaquat National ke liye — kitne units ya donors chahiye?"}'},
     {"role": "user", "content": "Need 3 units O+ at Indus Hospital"},
-    {"role": "assistant", "content": '{"blood_group":"O+","count":3,"location":null,"hospital":"Indus Hospital","urgency":"normal","missing_fields":[]}'},
+    {"role": "assistant", "content": '{"blood_group":"O+","count":3,"location":null,"hospital":"Indus Hospital","urgency":"normal","missing_fields":[],"reply":"Got it — 3 units of O+ for Indus Hospital. Finding the closest eligible donors now."}'},
     {"role": "user", "content": "mujhe B positive ke 2 donor chahiye gulshan ke paas AKU"},
-    {"role": "assistant", "content": '{"blood_group":"B+","count":2,"location":"Gulshan","hospital":"Aga Khan University Hospital","urgency":"normal","missing_fields":[]}'},
+    {"role": "assistant", "content": '{"blood_group":"B+","count":2,"location":"Gulshan","hospital":"Aga Khan University Hospital","urgency":"normal","missing_fields":[],"reply":"Samajh gaya — AKU ke liye 2 B+ donors, Gulshan ke aas paas. Abhi qareeb tareen eligible donors dhoond raha hoon."}'},
+    {"role": "user", "content": "assalam o alaikum"},
+    {"role": "assistant", "content": '{"blood_group":null,"count":null,"location":null,"hospital":null,"urgency":"normal","missing_fields":["blood_group","count","hospital"],"reply":"Walaikum assalam! Bataiye kis blood group ki zaroorat hai aur kis hospital ke liye?"}'},
+    {"role": "user", "content": "O negative"},
+    {"role": "assistant", "content": '{"blood_group":"O-","count":null,"location":null,"hospital":null,"urgency":"normal","missing_fields":["count","hospital"],"reply":"O- noted. Kitne units chahiye, aur konse hospital mein?"}'},
 ]
 
 
@@ -108,7 +122,9 @@ def parse_request(text: str) -> dict:
             resp = client.chat.completions.create(
                 model=GROQ_MODEL,
                 messages=messages,
-                temperature=0,
+                # Slight warmth so the chat reply varies turn-to-turn; field
+                # extraction stays reliable at this temperature.
+                temperature=0.4,
                 response_format={"type": "json_object"},
                 timeout=LLM_TIMEOUT_S,
             )
@@ -150,12 +166,16 @@ def _normalize(data: dict) -> dict:
     urgency = data.get("urgency")
     urgency = "high" if str(urgency).lower() == "high" else "normal"
 
+    reply = data.get("reply")
+    reply = reply.strip() if isinstance(reply, str) and reply.strip() else None
+
     out = {
         "blood_group": bg,
         "count": count,
         "location": data.get("location") or None,
         "hospital": hospital,
         "urgency": urgency,
+        "reply": reply,
     }
     out["missing_fields"] = [f for f in REQUIRED_FIELDS if not out.get(f)]
     return out
@@ -266,7 +286,9 @@ def _regex_parse(text: str) -> dict:
     urgency = "high" if re.search(r"jaldi|urgent|foran|emergency|asap|abhi|turant",
                                   t, re.IGNORECASE) else "normal"
 
+    # No LLM available -> no natural reply; the frontend falls back to a minimal
+    # field prompt. (We don't fabricate a canned reply here.)
     out = {"blood_group": bg, "count": count, "location": None,
-           "hospital": hospital, "urgency": urgency}
+           "hospital": hospital, "urgency": urgency, "reply": None}
     out["missing_fields"] = [f for f in REQUIRED_FIELDS if not out.get(f)]
     return out
