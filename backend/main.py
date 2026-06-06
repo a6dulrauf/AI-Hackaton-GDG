@@ -14,7 +14,7 @@ import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -268,4 +268,13 @@ def donor_respond(body: RespondBody):
     return {"donor_id": body.donor_id, "intent": intent, "status": donor["status"], **_summary(req)}
 
 
-# --- POST /voice (optional, Phase 7) — audio -> Whisper -> reuse parse ---------
+# --- S1: voice intake — audio -> Whisper -> transcript (reuses /request/parse) -
+@app.post("/voice")
+async def voice(file: UploadFile = File(...)):
+    """Transcribe an uploaded audio clip with Groq Whisper. The frontend feeds the
+    returned text back through the normal parse flow, so voice == typing."""
+    audio = await file.read()
+    text = llm.transcribe(audio, file.filename or "voice.webm")
+    if not text:
+        raise HTTPException(status_code=503, detail="Transcription unavailable. Try typing instead.")
+    return {"text": text}

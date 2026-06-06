@@ -29,3 +29,15 @@ export const createRequest = (body) => post('/request/create', body)
 export const getStatus = (id) => get(`/request/${id}/status`)
 export const escalateRequest = (id) => post(`/request/${id}/escalate`, {})
 export const respondDonor = (body) => post('/donor/respond', body)
+
+export async function transcribeVoice(blob) {
+  const fd = new FormData()
+  fd.append('file', blob, 'voice.webm')
+  const res = await fetch(`${API_BASE}/voice`, { method: 'POST', body: fd })
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`
+    try { const d = await res.json(); if (d.detail) detail = d.detail } catch { /* */ }
+    throw new Error(detail)
+  }
+  return res.json() // { text }
+}

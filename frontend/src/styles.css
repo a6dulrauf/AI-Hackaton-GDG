@@ -55,6 +55,9 @@ body {
 .chat__input { display: flex; gap: 8px; margin-top: 8px; }
 .chat__input input { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: #0f1115; color: var(--text); }
 .chat__input button { padding: 8px 14px; border-radius: 8px; border: none; background: var(--accent); color: #fff; cursor: pointer; }
+.mic { padding: 8px 11px !important; background: #0f1115 !important; border: 1px solid var(--border) !important; color: var(--text) !important; }
+.mic--on { background: var(--accent) !important; color: #fff !important; animation: urgentPulse 1s ease-in-out infinite; }
+.bubble--rec { background: #5a2e2e; }
 
 /* Map */
 .map { display: flex; flex-direction: column; height: 100%; }

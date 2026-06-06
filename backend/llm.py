@@ -12,6 +12,7 @@ Guardrails (CLAUDE.md):
 import os
 import re
 import json
+from typing import Optional
 
 import ranking  # reuse the hospital aliases/list for fallback hospital detection
 
@@ -174,6 +175,24 @@ def classify_reply(text: str) -> str:
         except Exception as e:  # noqa: BLE001
             print(f"[llm] classify_reply fell back to regex: {e}")
     return _regex_classify(text)
+
+
+## --- Voice transcription (S1, Groq Whisper) ----------------------------------
+def transcribe(audio_bytes: bytes, filename: str = "voice.webm") -> Optional[str]:
+    """Transcribe audio via Groq Whisper. Returns the text, or None if unavailable."""
+    client = get_client()
+    if client is None:
+        return None
+    try:
+        resp = client.audio.transcriptions.create(
+            model=WHISPER_MODEL,
+            file=(filename, audio_bytes),
+        )
+        text = getattr(resp, "text", None)
+        return text.strip() if text else None
+    except Exception as e:  # noqa: BLE001
+        print(f"[llm] transcribe failed: {e}")
+        return None
 
 
 def _regex_classify(text: str) -> str:
