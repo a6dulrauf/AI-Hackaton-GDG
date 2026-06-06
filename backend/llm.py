@@ -28,7 +28,14 @@ WHISPER_MODEL = "whisper-large-v3-turbo"
 REQUIRED_FIELDS = ["blood_group", "count", "hospital"]
 VALID_GROUPS = {"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"}
 
+# Demo-latency guardrails: cap how long we wait on Groq before falling back to
+# regex, and don't retry (a hung demo is worse than a slightly-rougher parse).
+LLM_TIMEOUT_S = 6.0       # parse / classify
+TRANSCRIBE_TIMEOUT_S = 30.0  # audio upload + transcription needs longer
+
 _groq_client = None
+# Cache successful LLM parses by exact text, so a repeated demo line is instant.
+_PARSE_CACHE = {}
 
 
 def get_client():
@@ -43,11 +50,21 @@ def get_client():
         return None
     try:
         from groq import Groq
-        _groq_client = Groq(api_key=api_key)
+        # Fail fast: bounded timeout, no retries (regex fallback covers failures).
+        _groq_client = Groq(api_key=api_key, timeout=LLM_TIMEOUT_S, max_retries=0)
     except Exception as e:  # noqa: BLE001
         print(f"[llm] Groq client unavailable ({e}) — using regex fallback.")
         return None
     return _groq_client
+
+
+def warmup():
+    """Prime the Groq connection/model once at startup so the first real
+    request isn't cold. Safe to call repeatedly; never raises."""
+    try:
+        parse_request("O+ 2 Indus")
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # --- Prompt -------------------------------------------------------------------
@@ -79,6 +96,10 @@ FEWSHOT = [
 
 def parse_request(text: str) -> dict:
     """Parse a free-text request into structured fields. Never raises."""
+    key = (text or "").strip().lower()
+    if key in _PARSE_CACHE:
+        return _PARSE_CACHE[key]
+
     client = get_client()
     if client is not None:
         try:
@@ -89,9 +110,12 @@ def parse_request(text: str) -> dict:
                 messages=messages,
                 temperature=0,
                 response_format={"type": "json_object"},
+                timeout=LLM_TIMEOUT_S,
             )
             data = json.loads(resp.choices[0].message.content)
-            return _normalize(data)
+            result = _normalize(data)
+            _PARSE_CACHE[key] = result  # cache only good LLM parses
+            return result
         except Exception as e:  # noqa: BLE001
             print(f"[llm] parse_request fell back to regex: {e}")
     return _regex_parse(text)
@@ -168,6 +192,7 @@ def classify_reply(text: str) -> str:
             resp = client.chat.completions.create(
                 model=GROQ_MODEL, messages=messages, temperature=0,
                 response_format={"type": "json_object"},
+                timeout=LLM_TIMEOUT_S,
             )
             intent = json.loads(resp.choices[0].message.content).get("intent")
             if intent in VALID_INTENTS:
@@ -187,6 +212,7 @@ def transcribe(audio_bytes: bytes, filename: str = "voice.webm") -> Optional[str
         resp = client.audio.transcriptions.create(
             model=WHISPER_MODEL,
             file=(filename, audio_bytes),
+            timeout=TRANSCRIBE_TIMEOUT_S,
         )
         text = getattr(resp, "text", None)
         return text.strip() if text else None

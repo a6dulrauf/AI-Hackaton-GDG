@@ -9,6 +9,7 @@ listed in docs/PLAN.md §8 and will be built in order on top of this shell.
 Run:  cd backend && uvicorn main:app --reload --port 8000
 Docs: http://localhost:8000/docs
 """
+import asyncio
 import csv
 import os
 from contextlib import asynccontextmanager
@@ -53,6 +54,9 @@ def load_donors(path: str = DONORS_CSV) -> list[dict]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     STATE["donors"] = load_donors()
+    # Warm up Groq off the event loop so the first real parse isn't cold.
+    # Fire-and-forget — never blocks startup or crashes if Groq is unavailable.
+    asyncio.get_running_loop().run_in_executor(None, llm.warmup)
     yield
     STATE["donors"].clear()
     STATE["requests"].clear()
