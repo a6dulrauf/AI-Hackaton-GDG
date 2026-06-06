@@ -1,0 +1,68 @@
+•  BUILD WITH AI 2026  ·  PROBLEMS BRIEF
+PARTNER
+Alkhidmat Karachi
+INDUSTRY
+Non-profit / HealthTech / Civic Tech
+
+
+Problem Briefs
+Two operational problems facing Pakistan's largest faith-based welfare network — submitted for the GDG Kolachi Build with AI 2026 hackathon finale.
+Problem-1
+Real-time blood donor matching over WhatsApp.
+
+
+The Problem
+When a patient needs blood urgently in Karachi, the search is chaotic. Families post in WhatsApp groups, call hospital admins, message Facebook pages, and forward CNICs of donors who turn out to be unreachable, ineligible, or in the wrong part of the city. 
+Al-Khidmat maintains a verified donor network across blood groups and neighbourhoods, but accessing it currently requires going through a human coordinator which doesn't scale, especially during emergencies, late nights, or when multiple requests come in at once.
+The need is not just to surface five names. It is to actually get five eligible, reachable donors to commit without spamming the entire database, without burning out frequent responders, and without forcing a stressed family to keep following up.
+Who Initiates
+Anyone, a patient's family member, a hospital staffer, or a member of the public sends a request to a WhatsApp number. The system must handle untrained users typing in Urdu, Roman Urdu, English, or a mix, often under stress, often with incomplete information.
+Where AI Carries the Work
+Natural-language intake. Requester types something like "need 5 O+ donors near Gulshan urgent, patient at Indus Hospital" or "AB negative chahiye jaldi, Liaquat National mein". An LLM extracts blood group, count, location, hospital, and urgency level — and asks follow-up questions only for what's missing.
+Intelligent ranking. Instead of broadcasting to everyone matching the blood group, rank candidates by a composite score: proximity to the hospital, time since last donation (eligibility), prior response history, time of day, and frequency of recent asks (to avoid donor fatigue).
+Wave-based outreach. Send the request to a first wave of 8–10 high-ranked donors. If five don't commit within a defined window, automatically escalate to the next wave. The requester sees a live count: "3 of 5 confirmed."
+Conversational follow-up with donors. A donor replies "I gave blood last month" the system understands this is an eligibility update, not a refusal, and silently updates the record. A reply like "kal subah aa sakta hoon" system schedules and confirms with the hospital.
+Constraints & Requirements
+Input must support Urdu, Roman Urdu, and English often mixed in the same message.
+WhatsApp is the primary channel. Web dashboard for the Al-Khidmat coordinator is acceptable as a secondary surface.
+For the hackathon, the WhatsApp layer may be mocked with a simple chat-style web interface — the demo should show the request-to-confirmation flow end to end.
+Donor data will be provided as a synthetic CSV (200+ records across blood groups, neighbourhoods, last-donation dates) so teams don't need to model real data.
+No real PII is used. No actual SMS or WhatsApp sending is required for the demo.
+Expected Outcome
+A deployed web app that simulates the full flow: a chat interface where a requester types a natural-language request, the system parses it, ranks and "contacts" donors (visualised in the dashboard), shows live commitment status, and produces a final summary the coordinator can act on. Bonus if teams demonstrate the donor-side conversational understanding.
+Why This Matters
+Al-Khidmat's volunteer network is the moat. No fintech, no startup, no app has 25,000+ verified donors with on-ground trust. The bottleneck is not data it is the interface between a stressed requester and that network. Solving this is solving a real bottleneck in Karachi's emergency medical response.
+
+
+
+Problem-2
+
+Automated donation verification & purpose routing.
+The Problem
+Thousands of donations reach Al-Khidmat each month, and a significant portion bypass card payment gateways entirely donors prefer direct bank transfer (IBFT, branch deposit, cheque). Due to local banking constraints, our partner banks do not push real-time sender details into our systems. We receive a generic credit notification only. The donor is expected to then send a payment screenshot to our WhatsApp number so we can attribute the donation to them.
+This creates a manual bottleneck. Our team must:
+Open the screenshot, read the transfer amount, time, and reference, often in low-quality images.
+Cross-check against the bank statement PDF the bank sends us periodically to confirm the transaction is real.
+Determine what the donation is for Gaza appeal, ration drive, orphan sponsorship, ambulance fund, or general — because the donor mentions this verbally in WhatsApp or sometimes not at all.
+Route the donation to the correct project ledger and issue a confirmation to the donor.
+Multiply this by hundreds of daily WhatsApp messages during Ramzan or a relief appeal, and it becomes one of our most expensive manual workflows.
+Where AI Carries the Work
+Screenshot OCR + structured extraction. Pull amount, transaction time, sender name (where visible), bank, and reference number from screenshots including poorly cropped, rotated, or low-resolution ones from common Pakistani banking apps (HBL, Meezan, UBL, JazzCash, EasyPaisa, Allied, Bank Alfalah).
+Cross-verification against bank statement. Match the extracted transaction against a provided bank statement PDF. The simplest fake-screenshot signal is the strongest: if the timestamp on the screenshot has no corresponding credit entry in the statement at that time, flag as suspicious. More subtle mismatches (amount differs, sender mismatch) get flagged for human review.
+Conversational purpose capture. Once the donation is verified, the bot asks the donor what the donation is for. The donor can answer freely "Gaza ke liye", "orphan sponsorship", "jahan zarurat ho" and an LLM maps the free text to one of Al-Khidmat's active projects. If the intent is ambiguous, the bot falls back to a menu of active campaigns.
+Auto-acknowledgement & receipt. Once verified and categorised, the donor receives a confirmation message with the donation reference, the project it was assigned to, and an offer to send a formal tax receipt.
+Constraints & Requirements
+Input language: Urdu, Roman Urdu, and English.
+Purpose capture: try free-text intent recognition first; fall back to a menu of active projects if the model is not confident.
+Fake-screenshot detection in scope: timestamp/amount cross-check against statement. Out of scope: pixel-level forgery detection flagging for human review is sufficient.
+Cases where the screenshot is valid but the matching entry isn't in the statement yet (timing lag) should be queued as "pending", not rejected.
+WhatsApp interface may be mocked with a chat-style web UI for the demo.
+Sample Data Provided
+A small set of anonymised real screenshots covering 4–5 Pakistani banks.
+A synthetic bank statement PDF with seeded transactions some matching the screenshots, some not, some near-matches that should be flagged.
+A list of active Al-Khidmat projects/campaigns the bot should be able to route donations to.
+Expected Outcome
+A deployed web app demonstrating the full flow: donor "sends" a screenshot, system extracts and verifies against the statement, returns a status (verified / flagged / pending), then asks for purpose and routes the donation. Coordinator dashboard shows the queue with verification status, extracted fields, and project assignment. The demo should let a judge upload their own screenshot and watch the system process it.
+Why This Matters
+This is the kind of problem AI was built for: messy unstructured input (screenshots, free-form WhatsApp messages) on one side, structured systems (bank statements, project ledgers) on the other, and a manual human bridge between them that doesn't scale. Solving it materially reduces the cost-per-donation for one of the country's largest non-profits, and the same pattern generalises to almost every Pakistani charity operating at scale.
+
