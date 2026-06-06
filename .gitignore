@@ -1,0 +1,25 @@
+# Secrets — never commit
+backend/.env
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Node / Vite
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.log
+
+# Claude Code — local overrides only (shared settings.json IS committed)
+.claude/settings.local.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
